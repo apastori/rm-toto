@@ -14,6 +14,7 @@ Keep `README.md` user-focused. Align with `project-overview.mdc` and `implementa
 
 2. **Build**
    - `make`, `make debug`, `make test`, `make clean`, optional `make install`
+   - Binaries land under `build/`: `build/rm-toto` from `make`; `build/tests/test_core` from `make test`
    - **Linux:** `make clean && make`
    - **Windows:** MSYS2 **UCRT64** terminal; `pacman -S make mingw-w64-ucrt-x86_64-gcc`; note Git Bash needs UCRT `bin` before Anaconda on `PATH`
    - Native Windows `.exe` runs in UCRT64, Git Bash, cmd, PowerShell — note that removing an **open** file may fail on Windows (`ERROR_SHARING_VIOLATION`), unlike Linux
@@ -32,7 +33,9 @@ Keep `README.md` user-focused. Align with `project-overview.mdc` and `implementa
 5. **Layout** — brief tree matching actual repo (include `LICENSE.txt`, `c_version.txt`):
    - `include/rm_toto.h` + `rm_toto_*.h`
    - `src/main.c` + `rm_toto_{emit,walk,prompt,cli}.c`
-   - `tests/test_runner.c` + `test_join_path_*.c` / `test_is_root_path.c` → `tests/test_core`
+   - `tests/test_runner.c` + `test_join_path_*.c` / `test_is_root_path.c` (sources)
+   - `build/rm-toto`, `build/tests/test_core` (build outputs; not tracked)
+   - `build/.gitkeep`, `build/tests/.gitkeep` (tracked empty-dir placeholders)
 
 ## Do not document in README
 

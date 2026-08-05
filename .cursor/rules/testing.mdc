@@ -1,18 +1,18 @@
 ---
 description: Unit test layout and conventions for rm-toto (path joining and root-path detection)
-globs: ["tests/**/*.c", "tests/**/*.h", "Makefile"]
 alwaysApply: false
 ---
-
 # Testing — rm-toto
 
 ## Scope
 
-The Makefile `test` target builds and runs **`tests/test_core`** (or `tests/test_core.exe` on Windows).
+The Makefile `test` target builds and runs **`build/tests/test_core`** (or `build/tests/test_core.exe` on Windows).
 
 Tests cover **`rm_toto_join_path()`** and **`rm_toto_is_root_path()`** only — pure, filesystem-free helpers. There are **no** subprocess/integration tests in-tree; the actual `unlink()`/`rmdir()` walk is not unit-tested, since exercising it would require creating and tearing down real files/directories.
 
 ## Layout
+
+`tests/` holds **source** only; the compiled test runner lives in `build/tests/`.
 
 | File | Role |
 |------|------|
@@ -34,7 +34,7 @@ One scenario per `.c` / `.h` pair; headers declare the test function for `test_r
 ## Build (from `Makefile`)
 
 ```makefile
-tests/test_core: $(TEST_SRCS) $(HDRS) $(wildcard tests/*.h)
+build/tests/test_core: $(TEST_SRCS) $(HDRS) $(wildcard tests/*.h)
 	$(CC) $(CFLAGS) -o $@ $(TEST_SRCS)
 ```
 
@@ -58,12 +58,12 @@ tests/test_core: $(TEST_SRCS) $(HDRS) $(wildcard tests/*.h)
 After `make`, in a scratch directory:
 
 ```sh
-./rm-toto --version
-./rm-toto --help
-touch a.txt && ./rm-toto -v a.txt          # expect "removed 'a.txt'", exit 0
+./build/rm-toto --version
+./build/rm-toto --help
+touch a.txt && ./build/rm-toto -v a.txt          # expect "removed 'a.txt'", exit 0
 mkdir -p tree/sub && touch tree/sub/f.txt
-./rm-toto -r tree                          # expect tree fully removed
-./rm-toto -f does-not-exist                # expect exit 0, no stderr
-./rm-toto does-not-exist                   # expect stderr + exit 1
-./rm-toto --no-preserve-root -r /tmp/scratch-only  # never test against real /
+./build/rm-toto -r tree                          # expect tree fully removed
+./build/rm-toto -f does-not-exist                # expect exit 0, no stderr
+./build/rm-toto does-not-exist                   # expect stderr + exit 1
+./build/rm-toto --no-preserve-root -r /tmp/scratch-only  # never test against real /
 ```

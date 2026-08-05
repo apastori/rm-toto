@@ -18,6 +18,15 @@ It removes directory entries for one or more pathnames via `unlink(2)` (files, s
 The compiled binary must always be named **`rm-toto`**. Never rename it.
 On Windows, MinGW may also emit `rm-toto.exe`; that is the same program.
 
+## Build output
+
+| Target | Output |
+|--------|--------|
+| `make` | `build/rm-toto` (`build/rm-toto.exe` on Windows) |
+| `make test` | `build/tests/test_core` (`build/tests/test_core.exe` on Windows) |
+
+Never commit build artifacts — only the `.gitkeep` placeholders under `build/` and `build/tests/` are tracked so the empty directories stay in the repo.
+
 ## Platforms
 
 | Platform | Build environment | Notes |
@@ -84,6 +93,7 @@ Supporting behaviour:
 
 include/ — rm_toto.h + rm_toto_{emit,walk,prompt,cli}.h
 src/ — main.c + rm_toto_{emit,walk,prompt,cli}.c
-tests/ — test_runner.c + test_join_path_*.c / test_is_root_path.c → binary tests/test_core
+tests/ — test_runner.c + test_join_path_*.c / test_is_root_path.c (sources only)
+build/ — `rm-toto` binary; `build/tests/test_core` test binary (artifacts ignored; `.gitkeep` tracked)
 
 See `implementation.mdc`, `toolchain-structure.mdc`, and `testing.mdc` for detail.
