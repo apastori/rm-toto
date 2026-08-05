@@ -1,0 +1,79 @@
+---
+description: C code style, formatting, naming, and quality rules for rm-toto
+globs: ["src/**/*.c", "include/**/*.h", "tests/**/*.c", "tests/**/*.h", "Makefile"]
+alwaysApply: false
+---
+
+# Code Style & Quality
+
+## Standard & flags
+
+- **C11** (`-std=c11`)
+- `-Wall -Wextra -Wpedantic -Werror`
+- `-D_POSIX_C_SOURCE=200809L`
+- Zero warnings — all treated as errors
+
+## Formatting
+
+- **Indentation:** 4 spaces. No tabs.
+- **Function definitions:** opening brace on its own line.
+- **Line length:** prefer ≤80 characters where practical.
+- **Files end with a single newline.**
+
+## Module conventions
+
+- **`src/main.c`** stays thin — wiring only; flag parsing lives in `rm_toto_cli.c`, removal logic lives in `rm_toto_walk.c`.
+- **`include/rm_toto.h`** — `static inline rm_toto_join_path()` is intentional (shared by `rm_toto_walk.c` and tests without linking `src/`).
+- **One concern per `src/rm_toto_*.c`** — do not collapse back into a monolith without reason.
+- **Platform code:** use `#if defined(_WIN32)` / `#else` only where MSYS2's POSIX emulation genuinely diverges (e.g. documenting why open-file removal may fail); do not add Windows-specific unlink retry logic unless explicitly requested — that is scope creep on top of `rm`'s contract.
+
+## Naming
+
+| Kind | Style | Examples |
+|------|-------|----------|
+| Functions | `snake_case` | `rm_toto_remove_path`, `rm_toto_join_path`, `rm_toto_confirm` |
+| Macros / constants | `UPPER_SNAKE_CASE` | `RM_TOTO_PATH_MAX`, `RM_TOTO_EXIT_FAILURE` |
+| Headers | `RM_TOTO_*_H` guards | `RM_TOTO_H`, `RM_TOTO_WALK_H` |
+
+Public API prefix: **`rm_toto_`** for module entry points; `rm_toto_join_path` is the spec name for the inline helper.
+
+## Memory
+
+- **No heap anywhere in-tree** — every path fits a stack `char path_buf[RM_TOTO_PATH_MAX]`; no `malloc`, no `realloc`, no heap fallback (contrast with `yes-toto`'s justified pre-loop `malloc`, which does not apply here).
+- Recursion uses one stack path buffer per frame, not a shared/global buffer.
+
+## Recursive walk rules (`rm_toto_walk.c`)
+
+- `lstat()` every entry before deciding how to handle it — **never** `stat()`; symlinks are unlinked, never dereferenced.
+- `unlink()` for files/symlinks/other non-directory types; `rmdir()` for directories, only after all children are gone (post-order).
+- No `remove()` — use explicit `unlink()`/`rmdir()` per project convention.
+- Errors on one entry are reported and traversal continues with siblings; no `exit()` mid-tree.
+- No `printf` / `fprintf` / `puts` / `fputs` / `fwrite` for `-v` output inside the walk — raw `write(2)` via `rm_toto_emit_verbose()`.
+
+## Errors
+
+- **stderr only:** `rm-toto: <context>: <strerror(errno)>`
+- Implemented in `rm_toto_emit.c`
+- Confirmation prompts also go to stderr; `-v` output goes to stdout.
+
+## Comments
+
+- Chain-of-thought block at top of each `src/*.c` and test file (see existing files).
+- Contract comments on non-trivial functions: preconditions, postconditions, return value, error behaviour.
+- Comment non-obvious decisions (path buffer sizing, post-order rationale, symlink handling); not obvious code.
+
+## Tests
+
+- Plain `assert()` — no external test framework.
+- One scenario per `tests/test_*.c`; runner in `tests/test_runner.c`.
+- Print `PASS: <name>` on success.
+- No filesystem I/O in tests — only pure helpers (`rm_toto_join_path`, `rm_toto_is_root_path`) are unit-tested; see `testing.mdc`.
+
+## What not to do
+
+- Do not compile as C++.
+- Do not link libraries beyond libc.
+- Do not use `remove()`, unbounded string copies, or ignore `unlink()`/`rmdir()` return values.
+- Do not follow symlinks when walking a tree.
+- Do not add `-P` (secure overwrite) or any trash/recycle-bin behaviour unless explicitly requested.
+- Do not install a custom `SIGINT` handler — default disposition is correct for this project.

@@ -1,0 +1,134 @@
+---
+description: Canonical C11 implementation for rm-toto — module layout, recursive unlink/rmdir walk, flag semantics, safety guards, and exit behaviour
+globs: ["src/**/*.c", "include/**/*.h"]
+alwaysApply: false
+---
+
+# rm-toto — Implementation (C11)
+
+## Module layout
+
+| Path | Role |
+|------|------|
+| `include/rm_toto.h` | `RM_TOTO_PATH_MAX`, `RM_TOTO_VERSION_STRING`, `RM_TOTO_EXIT_*` enum, `rm_toto_join_path()` (`static inline`), `rm_toto_remove_path()` declaration |
+| `include/rm_toto_emit.h` | `rm_toto_emit_error()`, `rm_toto_emit_verbose()` |
+| `include/rm_toto_walk.h` | `rm_toto_remove_path()`, `rm_toto_is_root_path()`, one-file-system helpers |
+| `include/rm_toto_prompt.h` | `rm_toto_confirm()` |
+| `include/rm_toto_cli.h` | `scan_meta_flags()`, `parse_options()`, `print_help()`, `print_version()` |
+| `src/main.c` | `main()` only — dispatch help/version, parse flags, iterate `argv` targets, call `rm_toto_remove_path()`, aggregate exit status |
+| `src/rm_toto_emit.c` | stderr diagnostics: `rm-toto: <context>: <strerror(errno)>`; stdout verbose lines |
+| `src/rm_toto_walk.c` | `rm_toto_remove_path()`, static `remove_directory_tree()`, `opendir`/`readdir`/`lstat` walk, `unlink()`/`rmdir()` calls, `--one-file-system` `st_dev` check, `--preserve-root` guard |
+| `src/rm_toto_prompt.c` | `rm_toto_confirm()` — writes prompt to stderr, reads y/n from stdin |
+| `src/rm_toto_cli.c` | Meta-flag scan, option parsing (`-f -i -I -r -R -d -v --preserve-root[=all] --no-preserve-root --one-file-system --`), help/version text |
+
+Each `.c` file opens with a **chain-of-thought comment block** (responsibility, syscalls, heap usage, C standard). Preserve that pattern when adding files.
+
+## C standard
+
+**ISO C11** (`-std=c11`), `-D_POSIX_C_SOURCE=200809L` for Linux POSIX.1-2008 (`lstat`, `unlink`, `rmdir`, `opendir`/`readdir`).
+MinGW builds define `_WIN32`; these calls route through MSYS2's POSIX emulation layer (see `project-overview.mdc` for the open-file-removal caveat).
+
+## Path buffer (`RM_TOTO_PATH_MAX`)
+
+`RM_TOTO_PATH_MAX` is `PATH_MAX` from `<limits.h>` when defined, else a fallback `4096`.
+
+`rm_toto_join_path()` builds `parent + '/' + name` into a caller-supplied stack buffer.
+
+- **Precondition:** `parent` and `name` are NUL-terminated; `parent_len + 1 + name_len < RM_TOTO_PATH_MAX`.
+- **Postcondition:** destination is NUL-terminated; return value indicates success or truncation.
+- **On truncation:** caller treats the entry as a failure (`rm_toto_emit_error("path too long")`), does **not** attempt the syscall, continues with siblings.
+
+No `malloc`/`realloc` anywhere in-tree — every path fits in one stack buffer bounded by `RM_TOTO_PATH_MAX`, unlike `yes-toto`'s justified pre-loop heap fallback.
+
+## Recursive removal (`src/rm_toto_walk.c`)
+
+**Traversal order: post-order.** For a directory: `opendir()` → for each entry (skipping `.`/`..`), `lstat()` it, recurse if it is itself a directory, `unlink()`/`rmdir()` it otherwise → after all entries are handled, `rmdir()` the now-empty directory itself. Manual recursion via `opendir`/`readdir` is used (not `nftw(3)`) for direct control over symlink handling and per-entry error aggregation.
+
+**Symlinks are never dereferenced.** Every entry is inspected with `lstat()`, never `stat()`. A symlink entry — even one pointing at a directory — is `unlink()`'d directly and never recursed into, matching `rm`'s "removes the link itself" contract.
+
+**Allowed in `remove_directory_tree()` / `rm_toto_remove_path()`:**
+
+- Stack `char path_buf[RM_TOTO_PATH_MAX]` per recursion frame, built via `rm_toto_join_path()`
+- `lstat()`, `unlink()`, `rmdir()`, `opendir()`/`readdir()`/`closedir()`
+- Propagating failures **upward as a return code**, not calling `exit()` mid-tree
+
+**Forbidden:**
+
+- `remove()` (ambiguous stdio wrapper over unlink/rmdir — use the explicit syscalls per project convention)
+- `malloc`/`calloc`/`realloc`
+- Following symlinks when deciding whether to recurse
+
+**Error continuation policy:** like real `rm`, a failure on one entry (permission denied, race with another process, etc.) is reported via `rm_toto_emit_error()` and does **not** abort the whole tree walk — sibling entries are still attempted. `main()` sets the final exit status to `1` if *any* entry failed.
+
+## Flag semantics (`src/rm_toto_cli.c`)
+
+| Flag | Long form(s) | Behaviour |
+|------|--------------|-----------|
+| `-f` | `--force` | Suppress prompts; missing top-level targets are silently ignored (no exit-1 contribution) |
+| `-i` | `--interactive`, `--interactive=always` | Prompt before every individual removal |
+| `-I` | `--interactive=once` | One prompt total, only when recursing or when 3+ targets are given |
+| — | `--interactive=never` | Same as `-f`'s prompt suppression, without the missing-file leniency |
+| `-r`, `-R` | `--recursive` | Enable directory recursion |
+| `-d` | `--dir` | Allow `rmdir()` of empty directories without `-r` |
+| `-v` | `--verbose` | Print `removed '<path>'` per successful removal, via `rm_toto_emit_verbose()` |
+| — | `--preserve-root[=all]` | **Default on.** Refuse to recurse onto `/`; `=all` additionally refuses any argument whose resolved path is a mount point, checked by comparing `st_dev` of the path against its parent |
+| — | `--no-preserve-root` | Disables the guard above |
+| — | `--one-file-system` | During recursion, skip subdirectories whose `st_dev` differs from the starting entry's `st_dev` |
+| — | `--` | End-of-options marker; everything after is a target, even if it starts with `-` |
+
+**Conflict rule:** among `-f`, `-i`, `-I`, the **last one given wins** (GNU behaviour) — `scan_meta_flags()` processes `argv` left to right and overwrites the active mode.
+
+## Verbose output (`-v`)
+
+`-v` output goes through `rm_toto_emit_verbose()` using raw `write(2)` from a stack buffer — no `printf`/`fprintf`/`puts` in `rm_toto_walk.c`, consistent with the project family's I/O discipline.
+
+## Prompting (`src/rm_toto_prompt.c`)
+
+`rm_toto_confirm(const char *path)`:
+
+- Writes `rm-toto: remove '<path>'? ` to **stderr** (not stdout — matches diagnostic-stream convention).
+- Reads one line from stdin; accepts a leading `y`/`Y` as affirmative, anything else (including EOF) as negative.
+- Return value: `true` (proceed) / `false` (skip this entry, do not count as an error).
+
+## `--preserve-root` guard
+
+Before any recursive removal begins, `rm_toto_is_root_path()` resolves the target and rejects it if it is exactly `/` (or, under `=all`, a detected mount point). This check runs **once per top-level argument**, before the walk starts — not on every recursion step.
+
+## Signals
+
+No custom handlers are installed. `rm-toto` is finite by construction; default signal disposition applies. An interrupted recursive removal simply leaves a partially-removed tree on disk, matching real `rm`'s behaviour under `SIGINT`.
+
+## Exit codes
+
+| Code | Constant | Meaning |
+|------|----------|---------|
+| `0` | `RM_TOTO_EXIT_OK` | `--help`, `--version`, or every requested removal succeeded (or was `-f`-suppressed) |
+| `1` | `RM_TOTO_EXIT_FAILURE` | Any removal failed, missing operand without `-f`, `--preserve-root` refusal, or setup failure |
+
+## Error messages
+
+All diagnostics on **stderr**, one line each:
+
+`rm-toto: <context>: <strerror(errno)>`
+
+Verbose (`-v`) lines and confirmation prompts are the only non-error output; verbose goes to stdout, prompts go to stderr.
+
+## Argument parsing (`src/rm_toto_cli.c`)
+
+1. Scan **all** `argv[1…]`: exact `--help` or `--h` → help + exit 0 (**wins** over version).
+2. Else exact `--version` or `--v` → `rm-toto <version>\n` + exit 0.
+3. Else `parse_options()` consumes recognized flags left to right, stopping option parsing at `--`; remaining arguments are removal targets.
+4. No targets after option parsing: with `-f`, exit `0`; without `-f`, emit "missing operand", exit `1`.
+5. Each target is passed to `rm_toto_remove_path()`; failures are reported per-entry and accumulate into the final exit status.
+
+## `rm_toto_join_path()` contract
+
+In `include/rm_toto.h`:
+
+- **Precondition:** `parent`, `name` non-NULL, NUL-terminated.
+- **Postcondition:** on success, `dest` holds `parent + "/" + name`, NUL-terminated, length `< RM_TOTO_PATH_MAX`.
+- **On would-be truncation:** returns failure; `dest` contents are unspecified — caller must not use it.
+
+## Naming
+
+Public recursive entry point: **`rm_toto_remove_path()`** (handles both single files and, with `-r`, whole trees).

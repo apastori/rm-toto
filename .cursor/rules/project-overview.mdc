@@ -1,0 +1,89 @@
+---
+description: Project identity, purpose, and high-level goals for `rm-toto`
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# rm-toto — Project Overview
+
+## What This Project Is
+
+`rm-toto` is a faithful CLI replica of the GNU Core Utilities `rm` command.
+It removes directory entries for one or more pathnames via `unlink(2)` (files, symlinks, FIFOs, device nodes) and `rmdir(2)` (empty directories), optionally walking directory trees recursively and calling both syscalls in post-order.
+
+`rm-toto` does **not** delete file *data* directly — it unlinks directory entries. Data reclamation is a filesystem-level consequence of the link count reaching zero and no process holding the inode open (see `implementation.mdc`).
+
+## Binary Name
+
+The compiled binary must always be named **`rm-toto`**. Never rename it.
+On Windows, MinGW may also emit `rm-toto.exe`; that is the same program.
+
+## Platforms
+
+| Platform | Build environment | Notes |
+|----------|-------------------|-------|
+| **Linux** | `gcc`/`clang` + GNU Make | Full POSIX path: `unlink()`/`rmdir()`/`lstat()` operate directly on the VFS |
+| **Windows** | **MSYS2 UCRT64** (recommended) | Native Windows `.exe`; `unlink()`/`rmdir()` are emulated over `DeleteFileW()`/`RemoveDirectoryW()` by the MSYS2 runtime — removing an **open** file frequently fails (`ERROR_SHARING_VIOLATION`) unless the opener requested `FILE_SHARE_DELETE`; this is a documented platform limitation, not something `rm-toto` works around |
+| **Git Bash** | Same binary as UCRT64; see `toolchain-structure.mdc` |
+
+Binaries are **not portable** across OSes — build separately on Linux and on Windows.
+
+## Scope — Keep It Minimal
+
+Supporting behaviour:
+
+- Built-in `--help` / `--h` and `--version` / `--v` (detected anywhere in `argv`; help wins if both appear)
+- `-f`, `--force`
+- `-i`, `--interactive` (always prompt)
+- `-I` and `--interactive=once` (single prompt for 3+ args or recursive removal)
+- `--interactive=never` / `--interactive=always` (explicit long-option forms of the above)
+- `-r`, `-R`, `--recursive`
+- `-d`, `--dir` (remove empty directories without `-r`)
+- `-v`, `--verbose`
+- `--preserve-root[=all]` (default **on**; `=all` extends the guard to any argument that is itself a mount point, best-effort via `st_dev`)
+- `--no-preserve-root`
+- `--one-file-system` (skip subdirectories whose `st_dev` differs from the starting entry during recursion)
+- `--` end-of-options marker (required for names beginning with `-`, e.g. `rm-toto -- -foo`)
+
+**Do not add**:
+
+- `-P` / secure-overwrite-before-unlink (BSD-only; ineffective on modern storage, out of scope)
+- Trash/recycle-bin semantics of any kind — removal is permanent
+- Interactive or TUI modes beyond the plain y/n prompt
+- Any feature that would break GNU `rm` behavioural compatibility
+- A custom `SIGINT` handler — unlike `yes-toto`, `rm-toto` is finite; default signal disposition is left in place (an interrupted recursive removal simply leaves a partially-removed tree, matching real `rm`)
+
+## Behavioural Contract
+
+| Invocation | Behaviour |
+|---|---|
+| `rm-toto file.txt` | `unlink()`s `file.txt`; error + exit `1` if missing (unless `-f`) |
+| `rm-toto -f missing.txt` | Silently succeeds, exit `0` |
+| `rm-toto dir/` | Fails: `EISDIR` — directories require `-r`/`-R` or `-d` |
+| `rm-toto -d emptydir/` | `rmdir()`s `emptydir/` if empty; fails if non-empty |
+| `rm-toto -r tree/` | Post-order walk: `unlink()`s files/symlinks, `rmdir()`s directories bottom-up |
+| `rm-toto -rf tree/` | Recursive, no prompts, missing top-level path ignored |
+| `rm-toto -i file.txt` | Prompts `rm-toto: remove 'file.txt'? ` on stderr before unlinking |
+| `rm-toto -I -r tree/` | One prompt for the whole recursive operation |
+| `rm-toto -v file.txt` | Prints `removed 'file.txt'` per entry removed |
+| `rm-toto -r /` | Refused — `--preserve-root` is on by default |
+| `rm-toto --no-preserve-root -r /` | Allowed (dangerous, matches GNU) |
+| `rm-toto -- -foo` | Removes a file literally named `-foo` |
+| `rm-toto --version` / `rm-toto --v` | prints `rm-toto <version>\n`, exits `0` |
+| `rm-toto --help` / `rm-toto --h` | prints usage on stdout, exits `0` |
+| `rm-toto` (no operands) | Without `-f`: "missing operand" on stderr, exit `1`. With `-f`: exit `0` |
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | `--help`, `--version`, or all requested removals succeeded (including `-f` suppressing missing-file errors) |
+| `1` | Any removal failed (permission, non-empty directory without recursion, `EISDIR` without `-r`/`-d`, missing operand without `-f`, `--preserve-root` refusal, signal/setup failure) |
+
+## Project Layout (summary)
+
+include/ — rm_toto.h + rm_toto_{emit,walk,prompt,cli}.h
+src/ — main.c + rm_toto_{emit,walk,prompt,cli}.c
+tests/ — test_runner.c + test_join_path_*.c / test_is_root_path.c → binary tests/test_core
+
+See `implementation.mdc`, `toolchain-structure.mdc`, and `testing.mdc` for detail.

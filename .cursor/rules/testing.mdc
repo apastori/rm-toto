@@ -1,0 +1,69 @@
+---
+description: Unit test layout and conventions for rm-toto (path joining and root-path detection)
+globs: ["tests/**/*.c", "tests/**/*.h", "Makefile"]
+alwaysApply: false
+---
+
+# Testing — rm-toto
+
+## Scope
+
+The Makefile `test` target builds and runs **`tests/test_core`** (or `tests/test_core.exe` on Windows).
+
+Tests cover **`rm_toto_join_path()`** and **`rm_toto_is_root_path()`** only — pure, filesystem-free helpers. There are **no** subprocess/integration tests in-tree; the actual `unlink()`/`rmdir()` walk is not unit-tested, since exercising it would require creating and tearing down real files/directories.
+
+## Layout
+
+| File | Role |
+|------|------|
+| `tests/test_runner.c` | `main()` — invokes all suites in fixed order |
+| `tests/test_join_path_basic.c` / `.h` | short parent + short name join correctly, NUL-terminated |
+| `tests/test_join_path_truncation.c` / `.h` | combined length `>= RM_TOTO_PATH_MAX` → failure return, no partial write assumed usable |
+| `tests/test_join_path_trailing_slash.c` / `.h` | parent already ending in `/` does not produce a doubled separator |
+| `tests/test_join_path_empty_name.c` / `.h` | empty `name` documented as precondition violation — PASS note only, not exercised |
+| `tests/test_is_root_path.c` / `.h` | `"/"` → true; `"/tmp"`, `""`, relative paths → false |
+
+One scenario per `.c` / `.h` pair; headers declare the test function for `test_runner.c`.
+
+## Framework
+
+- No external framework — plain C with `<assert.h>`.
+- Each case prints `PASS: <descriptive name>` on success.
+- `assert()` failure → `abort()` → non-zero exit from `make test`.
+
+## Build (from `Makefile`)
+
+```makefile
+tests/test_core: $(TEST_SRCS) $(HDRS) $(wildcard tests/*.h)
+	$(CC) $(CFLAGS) -o $@ $(TEST_SRCS)
+```
+
+`rm_toto_join_path()` and `rm_toto_is_root_path()` come from `#include "rm_toto.h"` / `"rm_toto_walk.h"` in each test file — **no link with `src/*.c`**.
+
+## Required cases (behaviour)
+
+1. Basic join: `"dir"` + `"file.txt"` → `"dir/file.txt"`.
+2. Truncation: parent/name combination that would exceed `RM_TOTO_PATH_MAX` → failure, not a silently truncated string.
+3. Trailing slash: `"dir/"` + `"file.txt"` → `"dir/file.txt"`, not `"dir//file.txt"`.
+4. Empty name: **undefined** per API contract — print PASS note only; do not call `rm_toto_join_path()`.
+5. Root detection: `"/"` is root; `"/tmp"` and relative paths are not.
+
+## Adding tests
+
+- Add `tests/test_<name>.c` + `.h`, declare runner function in `.h`, call from `test_runner.c`, append to `TEST_SRCS` in `Makefile`.
+- Keep tests allocation-free and filesystem-free; stack buffers and pure-function calls only.
+
+## Manual smoke tests (not automated)
+
+After `make`, in a scratch directory:
+
+```sh
+./rm-toto --version
+./rm-toto --help
+touch a.txt && ./rm-toto -v a.txt          # expect "removed 'a.txt'", exit 0
+mkdir -p tree/sub && touch tree/sub/f.txt
+./rm-toto -r tree                          # expect tree fully removed
+./rm-toto -f does-not-exist                # expect exit 0, no stderr
+./rm-toto does-not-exist                   # expect stderr + exit 1
+./rm-toto --no-preserve-root -r /tmp/scratch-only  # never test against real /
+```
