@@ -33,11 +33,11 @@ CC := $(shell command -v gcc >/dev/null 2>&1 && echo gcc || echo clang)
 
 | Target | Output |
 |--------|--------|
-| `make` / `all` | `rm-toto` |
-| `make debug` | `rm-toto-debug` |
-| `make test` | builds + runs `tests/test_core` |
-| `make clean` | removes `rm-toto`, `rm-toto-debug`, `tests/test_core` |
-| `make install` | `install -m 755 rm-toto /usr/local/bin` (Linux/macOS; needs sudo) |
+| `make` / `all` | `build/rm-toto` (`build/rm-toto.exe` on Windows) |
+| `make debug` | `build/rm-toto-debug` |
+| `make test` | builds + runs `build/tests/test_core` |
+| `make clean` | removes `build/rm-toto`, `build/rm-toto-debug`, `build/tests/test_core` (and `.exe` variants) |
+| `make install` | `install -m 755 build/rm-toto /usr/local/bin/rm-toto` (Linux/macOS; needs sudo) |
 
 **Main sources:** `src/main.c`, `src/rm_toto_emit.c`, `src/rm_toto_walk.c`, `src/rm_toto_prompt.c`, `src/rm_toto_cli.c`
 
@@ -49,6 +49,7 @@ CC := $(shell command -v gcc >/dev/null 2>&1 && echo gcc || echo clang)
 
 ## Directory layout
 
+```
 rm-toto/
 ├── LICENSE.txt — GNU GPL v2 (full text)
 ├── c_version.txt — C11 / compiler / toolchain documentation
@@ -56,26 +57,30 @@ rm-toto/
 ├── Makefile
 ├── README.md
 ├── include/
-│ ├── rm_toto.h
-│ ├── rm_toto_emit.h
-│ ├── rm_toto_walk.h
-│ ├── rm_toto_prompt.h
-│ └── rm_toto_cli.h
+│   ├── rm_toto.h
+│   ├── rm_toto_emit.h
+│   ├── rm_toto_walk.h
+│   ├── rm_toto_prompt.h
+│   └── rm_toto_cli.h
 ├── src/
-│ ├── main.c
-│ ├── rm_toto_emit.c
-│ ├── rm_toto_walk.c
-│ ├── rm_toto_prompt.c
-│ └── rm_toto_cli.c
-└── tests/
-├── test_runner.c
-├── test_join_path_basic.c / .h
-├── test_join_path_truncation.c / .h
-├── test_join_path_trailing_slash.c / .h
-├── test_join_path_empty_name.c / .h
-└── test_is_root_path.c / .h
+│   ├── main.c
+│   ├── rm_toto_emit.c
+│   ├── rm_toto_walk.c
+│   ├── rm_toto_prompt.c
+│   └── rm_toto_cli.c
+├── tests/                          (sources only)
+│   ├── test_runner.c
+│   ├── test_join_path_*.c / .h
+│   └── test_is_root_path.c / .h
+└── build/                          (outputs; .gitkeep tracked)
+    ├── .gitkeep
+    ├── rm-toto                     (make)
+    └── tests/
+        ├── .gitkeep
+        └── test_core               (make test)
+```
 
-Build artefacts (`rm-toto`, `rm-toto.exe`, `tests/test_core`, `tests/test_core.exe`) are gitignored.
+Build artefacts under `build/` (except `.gitkeep`) are gitignored.
 
 ## Building on Linux
 
@@ -93,7 +98,7 @@ cd /path/to/rm-toto
 make clean && make && make test
 ```
 
-Produces a **native Windows executable** (`rm-toto` or `rm-toto.exe`). Runs in UCRT64, Git Bash, and CMD.
+Produces a **native Windows executable** (`build/rm-toto` or `build/rm-toto.exe`). Runs in UCRT64, Git Bash, and CMD.
 
 ### Git Bash caveat
 
