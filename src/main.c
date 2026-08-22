@@ -41,8 +41,9 @@ int main(int argc, char **argv)
         return RM_TOTO_EXIT_FAILURE;
     }
 
+    /* number of targets to remove */
     n_targets = argc - first;
-    
+    /* If no targets to remove, emit a message and exit */
     if (n_targets <= 0) {
         if (opts.ignore_missing) {
             return RM_TOTO_EXIT_OK;
@@ -62,6 +63,7 @@ int main(int argc, char **argv)
 
     for (i = first; i < argc; i++) {
         if (rm_toto_remove_path(argv[i], &opts) != RM_TOTO_EXIT_OK) {
+            /* If one of the targets removal fails, set the status to failure */
             status = RM_TOTO_EXIT_FAILURE;
         }
     }
