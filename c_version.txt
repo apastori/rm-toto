@@ -1,0 +1,51 @@
+rm-toto — C language standard and toolchain
+===========================================
+
+Program version : 1.0.0  (RM_TOTO_VERSION_STRING in include/rm_toto.h)
+
+C standard      : ISO/IEC 9899:2011 (C11)
+Compiler flag   : -std=c11
+
+Why C11
+-------
+- Project specification requires C11.
+- static inline helpers in headers (rm_toto_join_path, rm_toto_is_root_path).
+- Consistent, portable baseline across Linux and MSYS2 UCRT64 (MinGW-w64).
+- No C++ features; compiled as C only.
+
+POSIX feature macro
+-------------------
+-D_POSIX_C_SOURCE=200809L
+
+Exposes POSIX.1-2008 interfaces used on Linux, notably:
+  - lstat(2)           (sys/stat.h)  — inspect entries without following links
+  - unlink(2)          (unistd.h)    — remove non-directory directory entries
+  - rmdir(2)           (unistd.h)    — remove empty directories
+  - opendir/readdir    (dirent.h)    — post-order recursive walk
+  - write(2)           (unistd.h)    — diagnostics and -v output
+
+On Windows (_WIN32), these route through MSYS2's POSIX emulation
+(DeleteFileW / RemoveDirectoryW). Removing an open file frequently fails
+with ERROR_SHARING_VIOLATION unless the opener requested FILE_SHARE_DELETE;
+this is a documented platform limitation, not something rm-toto works around.
+
+Signals
+-------
+No custom SIGINT handler. Default disposition applies; an interrupted
+recursive removal may leave a partially-removed tree (matches GNU rm).
+
+Build flags
+-----------
+Release : -std=c11 -Wall -Wextra -Wpedantic -Werror -D_POSIX_C_SOURCE=200809L -O2
+Debug   : same common flags + -g -O1 -fsanitize=address,undefined
+
+Outputs
+-------
+  make       → build/rm-toto
+  make test  → build/tests/test_core
+  make debug → build/rm-toto-debug
+
+Compilers
+---------
+GCC preferred (MSYS2 UCRT64: mingw-w64-ucrt-x86_64-gcc). clang also accepted
+when gcc is not on PATH.
