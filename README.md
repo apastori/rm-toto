@@ -31,8 +31,7 @@ pacman -S make mingw-w64-ucrt-x86_64-gcc
 make clean && make
 ```
 
-In Git Bash, put the UCRT64 `bin` directory on `PATH` ahead of Anaconda if both
-are installed. The native Windows `.exe` runs in UCRT64, Git Bash, cmd, and
+The native Windows `.exe` runs in UCRT64, Git Bash, cmd, and
 PowerShell. Removing an **open** file may fail on Windows
 (`ERROR_SHARING_VIOLATION`), unlike Linux.
 
