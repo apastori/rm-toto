@@ -172,8 +172,13 @@ static int remove_directory_tree(const char *path, const rm_toto_opts_t *opts,
         struct stat st;
         const char *name = ent->d_name;
 
-        if (name[0] == '.' &&
-            (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'))) {
+        // Skip . (Current Directory)
+        if (name[0] == '.' && name[1] == '\0') {
+            continue;
+        }
+        
+        // Skip .. (Parent Directory)
+        if (name[0] == '.' && name[1] == '.' && name[2] == '\0') {
             continue;
         }
 
