@@ -197,6 +197,7 @@ static int remove_directory_tree(const char *path, const rm_toto_opts_t *opts,
             continue;
         }
 
+        // If the path is a directory, we need to remove the directory
         if (S_ISDIR(st.st_mode)) {
             if (opts->one_file_system && st.st_dev != root_dev) {
                 continue;
@@ -208,6 +209,7 @@ static int remove_directory_tree(const char *path, const rm_toto_opts_t *opts,
             continue;
         }
 
+        // If the path is not a directory, we need to remove the file
         if (unlink_one(child, opts) != RM_TOTO_EXIT_OK) {
             status = RM_TOTO_EXIT_FAILURE;
         }
@@ -227,6 +229,7 @@ static int remove_directory_tree(const char *path, const rm_toto_opts_t *opts,
         status = RM_TOTO_EXIT_FAILURE;
     }
 
+    // Once the directory is empty, we need to remove the directory
     if (rmdir_one(path, opts) != RM_TOTO_EXIT_OK) {
         status = RM_TOTO_EXIT_FAILURE;
     }
@@ -239,6 +242,7 @@ int rm_toto_remove_path(const char *path, const rm_toto_opts_t *opts)
     struct stat st;
     int saved_errno;
 
+    // Get the stat of the path
     if (lstat(path, &st) != 0) {
         saved_errno = errno;
         /* ENOENT: File does not exist */
@@ -252,6 +256,7 @@ int rm_toto_remove_path(const char *path, const rm_toto_opts_t *opts)
         return RM_TOTO_EXIT_FAILURE;
     }
 
+    // If the path is a directory, we need to remove the directory
     if (S_ISDIR(st.st_mode)) {
         if (opts->recursive) {
             if (opts->preserve_root) {
@@ -267,6 +272,7 @@ int rm_toto_remove_path(const char *path, const rm_toto_opts_t *opts)
             return remove_directory_tree(path, opts, st.st_dev);
         }
 
+        // if te path is an empty directory, we need to remove the directory
         if (opts->dir) {
             return rmdir_one(path, opts);
         }
@@ -276,5 +282,6 @@ int rm_toto_remove_path(const char *path, const rm_toto_opts_t *opts)
         return RM_TOTO_EXIT_FAILURE;
     }
 
+    // If the path is not a directory, we need to remove the file
     return unlink_one(path, opts);
 }
